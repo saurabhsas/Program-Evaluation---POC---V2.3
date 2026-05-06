@@ -14,6 +14,9 @@ from visualization.chart_router import build_chart
 from utils.constants import PROMPTS
 
 
+# -----------------------------------
+# PAGE CONFIG
+# -----------------------------------
 st.set_page_config(layout="wide")
 st.title("🏥 Matched Cohort Analytics Dashboard")
 
@@ -34,35 +37,67 @@ df = load_data()
 matched = get_matched()
 
 
-# -----------------------------------
-# MATCHING QUALITY
-# -----------------------------------
+# ===================================
+# 🎛 MATCHING QUALITY (DROPDOWN + APPLY)
+# ===================================
 st.markdown("## 🎛 Matching Quality")
 
 CALIPER_DESC = {
-    "1e-05": "Very Strict (5 decimal)",
-    "0.0001": "Strict (4 decimal)",
-    "0.001": "Moderate (3 decimal)",
-    "0.02": "Loose",
-    "no_caliper": "Fallback (full coverage)"
+    "1e-05": "Very Strict (5 decimal precision match)",
+    "0.0001": "Strict (4 decimal precision)",
+    "0.001": "Moderate (3 decimal precision)",
+    "0.02": "Loose match (broader similarity)",
+    "no_caliper": "Fallback match (ensures full coverage)"
 }
 
-available_calipers = sorted(matched["caliper_used"].unique())
+# Add ALL option
+available_calipers = ["ALL"] + sorted(matched["caliper_used"].unique())
 
-selected_calipers = st.multiselect(
-    "Select Matching Precision Levels",
-    options=available_calipers,
-    default=available_calipers
-)
+# -----------------------------------
+# SESSION STATE
+# -----------------------------------
+if "selected_caliper" not in st.session_state:
+    st.session_state.selected_caliper = "ALL"
 
-with st.expander("📘 Caliper Definitions"):
-    for cal in available_calipers:
-        st.markdown(f"**{cal}** — {CALIPER_DESC.get(cal, '')}")
+# -----------------------------------
+# FORM
+# -----------------------------------
+with st.form("caliper_form"):
 
+    selected = st.selectbox(
+        "Select Matching Precision Level",
+        options=available_calipers,
+        format_func=lambda x: (
+            "ALL → All Calipers Combined"
+            if x == "ALL"
+            else f"{x} → {CALIPER_DESC.get(x, '')}"
+        )
+    )
 
-filtered_matched = matched[
-    matched["caliper_used"].isin(selected_calipers)
-]
+    apply_btn = st.form_submit_button("Apply")
+
+    if apply_btn:
+        st.session_state.selected_caliper = selected
+
+# -----------------------------------
+# APPLY FILTER
+# -----------------------------------
+selected_value = st.session_state.selected_caliper
+
+if selected_value == "ALL":
+    filtered_matched = matched
+else:
+    filtered_matched = matched[
+        matched["caliper_used"] == selected_value
+    ]
+
+# -----------------------------------
+# DISPLAY DESCRIPTION
+# -----------------------------------
+if selected_value == "ALL":
+    st.caption("Showing all calipers combined")
+else:
+    st.caption(f"{selected_value} → {CALIPER_DESC.get(selected_value)}")
 
 
 # -----------------------------------
@@ -84,14 +119,14 @@ combined = pd.concat([g1_data, g2_data])
 
 
 # -----------------------------------
-# FILTERS
+# FILTERS (SIDEBAR)
 # -----------------------------------
 filters = render_filter_ui(combined)
 filtered = apply_filters_cached(combined, filters)
 
 
 # -----------------------------------
-# KPI
+# KPI CALCULATION
 # -----------------------------------
 def compute_kpis(df):
     members = df["MEMBER_ID"].nunique()
@@ -109,7 +144,11 @@ k1 = compute_kpis(filtered[filtered["GROUP"] == "Group1"])
 k2 = compute_kpis(filtered[filtered["GROUP"] == "Group2"])
 
 
+# -----------------------------------
+# KPI DISPLAY
+# -----------------------------------
 st.markdown("## 📊 Key Metrics Overview")
+
 
 def render_kpis(title, kpis1, kpis2):
     st.markdown(f"### {title}")
@@ -129,12 +168,14 @@ def render_kpis(title, kpis1, kpis2):
 
 
 render_kpis("Group1", k1, k2)
+
 st.markdown("---")
+
 render_kpis("Group2", k2, k1)
 
 
 # -----------------------------------
-# PROMPT
+# PROMPT SECTION
 # -----------------------------------
 st.markdown("## 📈 Analysis")
 
@@ -160,7 +201,7 @@ for ins in generate_insights(selected_prompt, result):
 
 
 # -----------------------------------
-# TABLE
+# DATA TABLE (WITH $ FORMAT)
 # -----------------------------------
 st.markdown("## 📄 Data Sample")
 
