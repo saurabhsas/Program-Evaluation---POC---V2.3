@@ -14,34 +14,8 @@ from visualization.chart_router import build_chart
 from utils.constants import PROMPTS
 
 
-# -----------------------------------
-# PAGE CONFIG
-# -----------------------------------
 st.set_page_config(layout="wide")
 st.title("🏥 Matched Cohort Analytics Dashboard")
-
-
-# -----------------------------------
-# KPI STYLE
-# -----------------------------------
-st.markdown("""
-<style>
-div[data-testid="stMetric"] {
-    background-color: #ffffff;
-    padding: 12px;
-    border-radius: 12px;
-    box-shadow: 0px 2px 8px rgba(0,0,0,0.05);
-}
-div[data-testid="stMetricValue"] {
-    font-size: 30px !important;
-    font-weight: 700;
-}
-div[data-testid="stMetricLabel"] {
-    font-size: 14px;
-    font-weight: 600;
-}
-</style>
-""", unsafe_allow_html=True)
 
 
 # -----------------------------------
@@ -60,17 +34,17 @@ df = load_data()
 matched = get_matched()
 
 
-# ===================================
-# 🎛 MATCHING QUALITY SECTION
-# ===================================
+# -----------------------------------
+# MATCHING QUALITY
+# -----------------------------------
 st.markdown("## 🎛 Matching Quality")
 
 CALIPER_DESC = {
-    "1e-05": "Very Strict (5 decimal precision match)",
-    "0.0001": "Strict (4 decimal precision)",
-    "0.001": "Moderate (3 decimal precision)",
-    "0.02": "Loose match (broader similarity)",
-    "no_caliper": "Fallback match (ensures full coverage)"
+    "1e-05": "Very Strict (5 decimal)",
+    "0.0001": "Strict (4 decimal)",
+    "0.001": "Moderate (3 decimal)",
+    "0.02": "Loose",
+    "no_caliper": "Fallback (full coverage)"
 }
 
 available_calipers = sorted(matched["caliper_used"].unique())
@@ -78,14 +52,14 @@ available_calipers = sorted(matched["caliper_used"].unique())
 selected_calipers = st.multiselect(
     "Select Matching Precision Levels",
     options=available_calipers,
-    default=available_calipers,
-    format_func=lambda x: f"{x} → {CALIPER_DESC.get(x, '')}"
+    default=available_calipers
 )
 
+with st.expander("📘 Caliper Definitions"):
+    for cal in available_calipers:
+        st.markdown(f"**{cal}** — {CALIPER_DESC.get(cal, '')}")
 
-# -----------------------------------
-# APPLY CALIPER FILTER
-# -----------------------------------
+
 filtered_matched = matched[
     matched["caliper_used"].isin(selected_calipers)
 ]
@@ -104,23 +78,22 @@ colC.metric("Group2 Members", filtered_matched["G2_MEMBER_ID"].nunique())
 # -----------------------------------
 # LOAD MATCHED DATA
 # -----------------------------------
-g1_data, g2_data, filtered_matched = load_matched_datasets(df, filtered_matched)
+g1_data, g2_data, _ = load_matched_datasets(df, filtered_matched)
 
 combined = pd.concat([g1_data, g2_data])
 
 
 # -----------------------------------
-# SIDEBAR FILTERS
+# FILTERS
 # -----------------------------------
 filters = render_filter_ui(combined)
 filtered = apply_filters_cached(combined, filters)
 
 
 # -----------------------------------
-# KPI CALCULATION
+# KPI
 # -----------------------------------
 def compute_kpis(df):
-
     members = df["MEMBER_ID"].nunique()
     total = df["PAID"].sum()
 
@@ -129,9 +102,6 @@ def compute_kpis(df):
         "Total Cost": total,
         "Medical Cost": df["MEDICAL_PAID"].sum(),
         "Pharmacy Cost": df["RX_PAID"].sum(),
-        "ED Visits": df["EDVISITS"].sum(),
-        "IP Visits": df["IPVISITS"].sum(),
-        "PMPM": total / members if members else 0
     }
 
 
@@ -139,70 +109,40 @@ k1 = compute_kpis(filtered[filtered["GROUP"] == "Group1"])
 k2 = compute_kpis(filtered[filtered["GROUP"] == "Group2"])
 
 
-# -----------------------------------
-# ICONS
-# -----------------------------------
-ICON_MAP = {
-    "Members": "👥",
-    "Total Cost": "💰",
-    "Medical Cost": "🏥",
-    "Pharmacy Cost": "💊",
-    "ED Visits": "🚑",
-    "IP Visits": "🛏️",
-    "PMPM": "📊"
-}
+st.markdown("## 📊 Key Metrics Overview")
 
-
-def format_val(k, v):
-    if "Cost" in k or k == "PMPM":
-        return f"${v:,.0f}"
-    return f"{int(v):,}"
-
-
-# -----------------------------------
-# KPI RENDER
-# -----------------------------------
 def render_kpis(title, kpis1, kpis2):
-
     st.markdown(f"### {title}")
     cols = st.columns(4)
 
     for i, key in enumerate(kpis1.keys()):
+        v1 = kpis1[key]
+        v2 = kpis2[key]
 
-        v1 = float(kpis1[key])
-        v2 = float(kpis2[key])
-
-        pct = ((v1 - v2) / v2 * 100) if v2 != 0 else 0
+        pct = ((v1 - v2) / v2 * 100) if v2 else 0
 
         cols[i % 4].metric(
-            label=f"{ICON_MAP.get(key, '📊')} {key}",
-            value=format_val(key, v1),
-            delta=f"{pct:+.1f}%"
+            key,
+            f"${v1:,.0f}" if "Cost" in key else f"{int(v1)}",
+            f"{pct:+.1f}%"
         )
 
 
-# -----------------------------------
-# KPI SECTION
-# -----------------------------------
-st.markdown("## 📊 Key Metrics Overview")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    render_kpis("Group1", k1, k2)
-
-with col2:
-    render_kpis("Group2", k2, k1)
+render_kpis("Group1", k1, k2)
+st.markdown("---")
+render_kpis("Group2", k2, k1)
 
 
 # -----------------------------------
-# PROMPTS
+# PROMPT
 # -----------------------------------
+st.markdown("## 📈 Analysis")
+
 selected_prompt = st.selectbox("Select Analysis", PROMPTS)
 
 
 # -----------------------------------
-# QUERY + CHART
+# CHART
 # -----------------------------------
 result = run_prompt(selected_prompt, filtered)
 
@@ -220,7 +160,16 @@ for ins in generate_insights(selected_prompt, result):
 
 
 # -----------------------------------
-# DATA SAMPLE
+# TABLE
 # -----------------------------------
 st.markdown("## 📄 Data Sample")
-st.dataframe(result.head(50))
+
+display_df = result.copy()
+
+for col in display_df.columns:
+    if display_df[col].dtype in ["int64", "float64"] and col != "MONTH":
+        display_df[col] = display_df[col].apply(
+            lambda x: f"${x:,.0f}" if pd.notnull(x) else x
+        )
+
+st.dataframe(display_df.head(50))
