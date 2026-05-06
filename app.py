@@ -32,12 +32,10 @@ div[data-testid="stMetric"] {
     border-radius: 12px;
     box-shadow: 0px 2px 8px rgba(0,0,0,0.05);
 }
-
 div[data-testid="stMetricValue"] {
     font-size: 30px !important;
     font-weight: 700;
 }
-
 div[data-testid="stMetricLabel"] {
     font-size: 14px;
     font-weight: 600;
@@ -59,26 +57,48 @@ def get_matched():
 # LOAD DATA
 # -----------------------------------
 df = load_data()
-
 matched = get_matched()
 
 
-# -----------------------------------
-# CALIPER SELECTION (NEW FEATURE)
-# -----------------------------------
-st.sidebar.markdown("### ⚙️ Matching Quality")
+# ===================================
+# 🎛 MATCHING QUALITY SECTION
+# ===================================
+st.markdown("## 🎛 Matching Quality")
+
+CALIPER_DESC = {
+    "1e-05": "Very Strict (5 decimal precision match)",
+    "0.0001": "Strict (4 decimal precision)",
+    "0.001": "Moderate (3 decimal precision)",
+    "0.02": "Loose match (broader similarity)",
+    "no_caliper": "Fallback match (ensures full coverage)"
+}
 
 available_calipers = sorted(matched["caliper_used"].unique())
 
-selected_calipers = st.sidebar.multiselect(
-    "Select Calipers",
+selected_calipers = st.multiselect(
+    "Select Matching Precision Levels",
     options=available_calipers,
-    default=available_calipers
+    default=available_calipers,
+    format_func=lambda x: f"{x} → {CALIPER_DESC.get(x, '')}"
 )
 
+
+# -----------------------------------
+# APPLY CALIPER FILTER
+# -----------------------------------
 filtered_matched = matched[
     matched["caliper_used"].isin(selected_calipers)
 ]
+
+
+# -----------------------------------
+# MATCH SUMMARY
+# -----------------------------------
+colA, colB, colC = st.columns(3)
+
+colA.metric("Total Matches", len(filtered_matched))
+colB.metric("Group1 Members", filtered_matched["G1_MEMBER_ID"].nunique())
+colC.metric("Group2 Members", filtered_matched["G2_MEMBER_ID"].nunique())
 
 
 # -----------------------------------
@@ -90,7 +110,7 @@ combined = pd.concat([g1_data, g2_data])
 
 
 # -----------------------------------
-# FILTERS
+# SIDEBAR FILTERS
 # -----------------------------------
 filters = render_filter_ui(combined)
 filtered = apply_filters_cached(combined, filters)
@@ -100,6 +120,7 @@ filtered = apply_filters_cached(combined, filters)
 # KPI CALCULATION
 # -----------------------------------
 def compute_kpis(df):
+
     members = df["MEMBER_ID"].nunique()
     total = df["PAID"].sum()
 
@@ -118,6 +139,9 @@ k1 = compute_kpis(filtered[filtered["GROUP"] == "Group1"])
 k2 = compute_kpis(filtered[filtered["GROUP"] == "Group2"])
 
 
+# -----------------------------------
+# ICONS
+# -----------------------------------
 ICON_MAP = {
     "Members": "👥",
     "Total Cost": "💰",
@@ -135,6 +159,9 @@ def format_val(k, v):
     return f"{int(v):,}"
 
 
+# -----------------------------------
+# KPI RENDER
+# -----------------------------------
 def render_kpis(title, kpis1, kpis2):
 
     st.markdown(f"### {title}")
@@ -147,12 +174,10 @@ def render_kpis(title, kpis1, kpis2):
 
         pct = ((v1 - v2) / v2 * 100) if v2 != 0 else 0
 
-        delta = f"{pct:+.1f}%"
-
         cols[i % 4].metric(
             label=f"{ICON_MAP.get(key, '📊')} {key}",
             value=format_val(key, v1),
-            delta=delta
+            delta=f"{pct:+.1f}%"
         )
 
 
@@ -171,16 +196,7 @@ with col2:
 
 
 # -----------------------------------
-# MATCH SUMMARY
-# -----------------------------------
-st.sidebar.markdown("### 📊 Match Summary")
-st.sidebar.write("Total Matches:", len(filtered_matched))
-st.sidebar.write("Unique G1:", filtered_matched["G1_MEMBER_ID"].nunique())
-st.sidebar.write("Unique G2:", filtered_matched["G2_MEMBER_ID"].nunique())
-
-
-# -----------------------------------
-# PROMPT
+# PROMPTS
 # -----------------------------------
 selected_prompt = st.selectbox("Select Analysis", PROMPTS)
 
