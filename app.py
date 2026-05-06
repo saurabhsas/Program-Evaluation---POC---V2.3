@@ -38,7 +38,7 @@ matched = get_matched()
 
 
 # ===================================
-# 🎛 MATCHING QUALITY (DROPDOWN + APPLY)
+# 🎛 MATCHING QUALITY (MULTI + APPLY)
 # ===================================
 st.markdown("## 🎛 Matching Quality")
 
@@ -50,23 +50,17 @@ CALIPER_DESC = {
     "no_caliper": "Fallback match (ensures full coverage)"
 }
 
-# Add ALL option
 available_calipers = ["ALL"] + sorted(matched["caliper_used"].unique())
 
-# -----------------------------------
-# SESSION STATE
-# -----------------------------------
-if "selected_caliper" not in st.session_state:
-    st.session_state.selected_caliper = "ALL"
+if "selected_calipers" not in st.session_state:
+    st.session_state.selected_calipers = ["ALL"]
 
-# -----------------------------------
-# FORM
-# -----------------------------------
 with st.form("caliper_form"):
 
-    selected = st.selectbox(
-        "Select Matching Precision Level",
+    selected = st.multiselect(
+        "Select Matching Precision Levels",
         options=available_calipers,
+        default=st.session_state.selected_calipers,
         format_func=lambda x: (
             "ALL → All Calipers Combined"
             if x == "ALL"
@@ -77,27 +71,23 @@ with st.form("caliper_form"):
     apply_btn = st.form_submit_button("Apply")
 
     if apply_btn:
-        st.session_state.selected_caliper = selected
+        st.session_state.selected_calipers = selected
 
-# -----------------------------------
-# APPLY FILTER
-# -----------------------------------
-selected_value = st.session_state.selected_caliper
 
-if selected_value == "ALL":
+selected_values = st.session_state.selected_calipers
+
+if "ALL" in selected_values or len(selected_values) == 0:
     filtered_matched = matched
 else:
     filtered_matched = matched[
-        matched["caliper_used"] == selected_value
+        matched["caliper_used"].isin(selected_values)
     ]
 
-# -----------------------------------
-# DISPLAY DESCRIPTION
-# -----------------------------------
-if selected_value == "ALL":
+# Display selection
+if "ALL" in selected_values or len(selected_values) == 0:
     st.caption("Showing all calipers combined")
 else:
-    st.caption(f"{selected_value} → {CALIPER_DESC.get(selected_value)}")
+    st.caption(f"Selected: {', '.join(selected_values)}")
 
 
 # -----------------------------------
@@ -119,7 +109,7 @@ combined = pd.concat([g1_data, g2_data])
 
 
 # -----------------------------------
-# FILTERS (SIDEBAR)
+# FILTERS
 # -----------------------------------
 filters = render_filter_ui(combined)
 filtered = apply_filters_cached(combined, filters)
@@ -129,6 +119,7 @@ filtered = apply_filters_cached(combined, filters)
 # KPI CALCULATION
 # -----------------------------------
 def compute_kpis(df):
+
     members = df["MEMBER_ID"].nunique()
     total = df["PAID"].sum()
 
@@ -137,6 +128,9 @@ def compute_kpis(df):
         "Total Cost": total,
         "Medical Cost": df["MEDICAL_PAID"].sum(),
         "Pharmacy Cost": df["RX_PAID"].sum(),
+        "ED Visits": df["EDVISITS"].sum(),
+        "IP Visits": df["IPVISITS"].sum(),
+        "PMPM": total / members if members else 0
     }
 
 
@@ -151,31 +145,38 @@ st.markdown("## 📊 Key Metrics Overview")
 
 
 def render_kpis(title, kpis1, kpis2):
+
     st.markdown(f"### {title}")
     cols = st.columns(4)
 
     for i, key in enumerate(kpis1.keys()):
+
         v1 = kpis1[key]
         v2 = kpis2[key]
 
         pct = ((v1 - v2) / v2 * 100) if v2 else 0
 
+        # Format value
+        if "Cost" in key or key == "PMPM":
+            value = f"${v1:,.0f}"
+        else:
+            value = f"{int(v1):,}"
+
         cols[i % 4].metric(
             key,
-            f"${v1:,.0f}" if "Cost" in key else f"{int(v1)}",
+            value,
             f"{pct:+.1f}%"
         )
 
 
+# Vertical layout
 render_kpis("Group1", k1, k2)
-
 st.markdown("---")
-
 render_kpis("Group2", k2, k1)
 
 
 # -----------------------------------
-# PROMPT SECTION
+# ANALYSIS
 # -----------------------------------
 st.markdown("## 📈 Analysis")
 
@@ -201,7 +202,7 @@ for ins in generate_insights(selected_prompt, result):
 
 
 # -----------------------------------
-# DATA TABLE (WITH $ FORMAT)
+# DATA TABLE
 # -----------------------------------
 st.markdown("## 📄 Data Sample")
 
