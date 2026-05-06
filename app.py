@@ -52,11 +52,11 @@ CALIPER_DESC = {
 
 available_calipers = ["ALL"] + sorted(matched["caliper_used"].unique())
 
+# Session state to persist selection
 if "selected_calipers" not in st.session_state:
     st.session_state.selected_calipers = ["ALL"]
 
 with st.form("caliper_form"):
-
     selected = st.multiselect(
         "Select Matching Precision Levels",
         options=available_calipers,
@@ -73,9 +73,9 @@ with st.form("caliper_form"):
     if apply_btn:
         st.session_state.selected_calipers = selected
 
-
 selected_values = st.session_state.selected_calipers
 
+# Apply filtering
 if "ALL" in selected_values or len(selected_values) == 0:
     filtered_matched = matched
 else:
@@ -104,7 +104,6 @@ colC.metric("Group2 Members", filtered_matched["G2_MEMBER_ID"].nunique())
 # LOAD MATCHED DATA
 # -----------------------------------
 g1_data, g2_data, _ = load_matched_datasets(df, filtered_matched)
-
 combined = pd.concat([g1_data, g2_data])
 
 
@@ -119,7 +118,6 @@ filtered = apply_filters_cached(combined, filters)
 # KPI CALCULATION
 # -----------------------------------
 def compute_kpis(df):
-
     members = df["MEMBER_ID"].nunique()
     total = df["PAID"].sum()
 
@@ -145,18 +143,14 @@ st.markdown("## 📊 Key Metrics Overview")
 
 
 def render_kpis(title, kpis1, kpis2):
-
     st.markdown(f"### {title}")
     cols = st.columns(4)
 
     for i, key in enumerate(kpis1.keys()):
-
         v1 = kpis1[key]
         v2 = kpis2[key]
-
         pct = ((v1 - v2) / v2 * 100) if v2 else 0
 
-        # Format value
         if "Cost" in key or key == "PMPM":
             value = f"${v1:,.0f}"
         else:
@@ -169,7 +163,6 @@ def render_kpis(title, kpis1, kpis2):
         )
 
 
-# Vertical layout
 render_kpis("Group1", k1, k2)
 st.markdown("---")
 render_kpis("Group2", k2, k1)
@@ -179,7 +172,6 @@ render_kpis("Group2", k2, k1)
 # ANALYSIS
 # -----------------------------------
 st.markdown("## 📈 Analysis")
-
 selected_prompt = st.selectbox("Select Analysis", PROMPTS)
 
 
@@ -187,7 +179,6 @@ selected_prompt = st.selectbox("Select Analysis", PROMPTS)
 # CHART
 # -----------------------------------
 result = run_prompt(selected_prompt, filtered)
-
 fig = build_chart(result, selected_prompt)
 st.plotly_chart(fig, use_container_width=True)
 
@@ -196,7 +187,6 @@ st.plotly_chart(fig, use_container_width=True)
 # INSIGHTS
 # -----------------------------------
 st.markdown("## 🧠 Insights")
-
 for ins in generate_insights(selected_prompt, result):
     st.write("•", ins)
 
@@ -207,7 +197,6 @@ for ins in generate_insights(selected_prompt, result):
 st.markdown("## 📄 Data Sample")
 
 display_df = result.copy()
-
 for col in display_df.columns:
     if display_df[col].dtype in ["int64", "float64"] and col != "MONTH":
         display_df[col] = display_df[col].apply(
