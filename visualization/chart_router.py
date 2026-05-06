@@ -8,8 +8,15 @@ def build_chart(df, prompt):
     if df is None or df.empty:
         return px.scatter(title="No data available")
 
+    cols = df.columns.tolist()
+
     # -----------------------------------
-    if prompt == "Monthly Total Cost Trend":
+    # MONTHLY TREND
+    # -----------------------------------
+    if "MONTH" in cols and "Value" in cols:
+
+        df["MONTH"] = df["MONTH"].astype(str)
+
         fig = px.line(
             df,
             x="MONTH",
@@ -18,70 +25,48 @@ def build_chart(df, prompt):
             markers=True,
             title="Monthly Cost Trend"
         )
+
         fig.update_xaxes(type="category")
+        fig.update_yaxes(tickprefix="$", separatethousands=True)
+
         return fig
 
     # -----------------------------------
-    if prompt == "Medical vs Pharmacy Cost Split":
-        return px.bar(
+    # DIMENSION BASED
+    # -----------------------------------
+    if "Dimension" in cols and "Value" in cols:
+
+        fig = px.bar(
             df,
             x="Dimension",
             y="Value",
             color="GROUP",
             barmode="group",
-            title="Medical vs Pharmacy Cost"
+            title=prompt
         )
 
-    # -----------------------------------
-    if "Line of Business" in prompt:
-        return px.bar(
-            df,
-            x="Dimension",
-            y="Value",
-            color="GROUP",
-            barmode="group",
-            title="Cost by Line of Business"
-        )
+        fig.update_yaxes(tickprefix="$", separatethousands=True)
+
+        return fig
 
     # -----------------------------------
-    if "County" in prompt:
-        return px.bar(
-            df,
-            x="Dimension",
-            y="Value",
-            color="GROUP",
-            title="Cost by County"
-        )
-
+    # MEMBER BASED
     # -----------------------------------
-    if "Age Category" in prompt or "Gender" in prompt:
-        return px.bar(
-            df,
-            x="Dimension",
-            y="Value",
-            color="GROUP",
-            barmode="group"
-        )
+    if "MEMBER_ID" in cols:
 
-    # -----------------------------------
-    if "Top 10" in prompt or "High Utilization" in prompt:
-        return px.bar(
-            df,
-            x="Dimension",
-            y="Value",
-            color="GROUP",
-            title="Top Members"
-        )
-
-    # -----------------------------------
-    if "Pareto" in prompt:
-        return px.bar(
+        fig = px.bar(
             df,
             x="MEMBER_ID",
             y="PAID",
             color="GROUP",
-            title="Top 5% Members Cost"
+            title=prompt
         )
 
+        fig.update_yaxes(tickprefix="$", separatethousands=True)
+
+        return fig
+
+    # -----------------------------------
+    # FALLBACK
     # -----------------------------------
     return px.bar(df)
